@@ -1,0 +1,101 @@
+ import subprocess
+import time
+
+# NOTE: To use a real LLM, you would import their library here.
+# For example: import openai  OR  import google.generativeai as genai
+
+def run_c_engine(matrix_size, tile_size):
+    """Runs the compiled C program and returns the execution time."""
+    print(f"--> Running with tile_size = {tile_size}...")
+    
+    # Run the C executable (make sure the name matches what you compiled!)
+    # Using './matrix_cache' based on your terminal output
+    result = subprocess.run(
+        ["./matrix_cache", str(matrix_size), str(tile_size)], 
+        capture_output=True, 
+        text=True
+    )
+    
+    # The C program prints the time as a float, so we parse it
+    try:
+        exec_time = float(result.stdout.strip())
+        print(f"    Time: {exec_time:.4f} seconds")
+        return exec_time
+    except ValueError:
+        print("    Error: C program didn't return a valid number.")
+        print(f"    Raw output: {result.stdout}")
+        return None
+
+
+def ask_llm_for_next_tile_size(history_text):
+    """
+    This is where the magic happens. We send our performance history to the LLM
+    and ask it to reason about the data and pick a new tile size.
+    """
+    
+    prompt = f"""
+    You are an expert low-level performance engineer tuning a C matrix multiplication algorithm.
+    The matrix size is 1024x1024.
+    
+    Here is the history of our experiments so far:
+    {history_text}
+    
+    Based on this data, suggest the next 'tile_size' we should test to try and minimize the execution time.
+    Think step-by-step about cache sizes, but your final output MUST be just the integer number of the tile size.
+    """
+    
+    # ---------------------------------------------------------
+    # TODO: INSERT YOUR LLM API CALL HERE!
+    # 
+    # Example using OpenAI:
+    # response = client.chat.completions.create(
+    #     model="gpt-4o",
+    #     messages=[{"role": "user", "content": prompt}]
+    # )
+    # return int(response.choices[0].message.content.strip())
+    # ---------------------------------------------------------
+    
+    # For now, we will simulate the LLM's response so you can test the loop
+    # Let's pretend the LLM sees 32 was fast, and guesses 16 to see if smaller is better
+    print("\n[Mock LLM is thinking...]")
+    time.sleep(1) 
+    mock_guess = 16 
+    print(f"[Mock LLM suggested: {mock_guess}]\n")
+    return mock_guess
+
+
+def main():
+    matrix_size = 1024
+    history = [] # We will store tuples of (tile_size, time)
+    
+    print("Starting Autonomous Tuning Loop...\n")
+    
+    # We always need a starting point for the LLM to have some initial data
+    initial_tile_size = 128
+    time_taken = run_c_engine(matrix_size, initial_tile_size)
+    history.append((initial_tile_size, time_taken))
+    
+    # The Agent Loop: Observe -> Reason -> Act
+    for iteration in range(3): # Let's run it 3 times
+        print(f"\n--- Iteration {iteration + 1} ---")
+        
+        # 1. Format the history into text for the LLM
+        history_text = ""
+        for ts, t in history:
+            history_text += f"- Tile Size {ts} took {t:.4f} seconds\n"
+            
+        # 2. Reason (Ask the LLM)
+        next_tile = ask_llm_for_next_tile_size(history_text)
+        
+        # 3. Act (Run the engine with the new parameter)
+        time_taken = run_c_engine(matrix_size, next_tile)
+        
+        # 4. Observe (Record the result)
+        history.append((next_tile, time_taken))
+        
+    print("\n--- Tuning Complete ---")
+    best_run = min(history, key=lambda x: x[1])
+    print(f"Best configuration found: tile_size = {best_run[0]} at {best_run[1]:.4f} seconds")
+
+if __name__ == "__main__":
+    main()
